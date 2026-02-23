@@ -38,7 +38,7 @@ log = structlog.get_logger()
 
 
 class RSVPSettings(BaseSettings):
-    GMAIL_POLL_INTERVAL_SECONDS: int = 300
+    GMAIL_POLL_INTERVAL_SECONDS: int = 60
     LOG_LEVEL: str = "INFO"
 
     class Config:
