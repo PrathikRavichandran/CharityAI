@@ -1,0 +1,222 @@
+# ============================================================================
+# CharityAI — Production Docker Compose
+# All 9 agents + PostgreSQL + Redis
+# ============================================================================
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+# Requires:
+#   - .env file with real credentials
+#   - auth/ directory containing gmail_token.json + gcalendar_token.json
+
+version: "3.9"
+
+x-common: &common
+  restart: unless-stopped
+  env_file: ../.env
+  networks:
+    - charity_net
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+x-agent-deps: &agent-deps
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+
+  # ── Infrastructure ───────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:15-alpine
+    <<: *common
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pg-charityai
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    <<: *common
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Gate 1: Orchestrator (port 8000) ─────────────────────────────────────
+
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: agents/orchestrator/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      start_period: 60s
+
+  # Audit sidecar runs alongside orchestrator
+  audit_sidecar:
+    build:
+      context: ..
+      dockerfile: agents/orchestrator/Dockerfile
+    <<: [ *common, *agent-deps ]
+    command: [ "python", "-m", "agents.orchestrator.audit_sidecar" ]
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  # ── Gate 2: Email Watcher (port 8001) ────────────────────────────────────
+
+  email_watcher:
+    build:
+      context: ..
+      dockerfile: agents/email_watcher/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../auth:/app/auth:ro # Gmail OAuth token (read-only mount)
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  # ── Gate 3: Dedup Guard (port 8002) ──────────────────────────────────────
+
+  dedup_guard:
+    build:
+      context: ..
+      dockerfile: agents/dedup_guard/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8002:8002"
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  # ── Gate 4: Charity Verifier (port 8003) ─────────────────────────────────
+
+  charity_verifier:
+    build:
+      context: ..
+      dockerfile: agents/charity_verifier/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8003:8003"
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  # ── Gate 5: Eligibility Agent (port 8004) ────────────────────────────────
+
+  eligibility_agent:
+    build:
+      context: ..
+      dockerfile: agents/eligibility_agent/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8004:8004"
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  # ── Gate 6: Prioritizer (port 8005) ──────────────────────────────────────
+
+  prioritizer:
+    build:
+      context: ..
+      dockerfile: agents/prioritizer/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8005:8005"
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  # ── Gate 7: Calendar Agent (port 8006) ───────────────────────────────────
+
+  calendar_agent:
+    build:
+      context: ..
+      dockerfile: agents/calendar_agent/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8006:8006"
+    volumes:
+      - ../auth:/app/auth:ro # GCal OAuth token
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  # ── Gate 8: PA Notification (port 8007) ──────────────────────────────────
+
+  pa_notification:
+    build:
+      context: ..
+      dockerfile: agents/pa_notification/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8007:8007"
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  # ── Gate 9: Email Composer (port 8008) ───────────────────────────────────
+
+  email_composer:
+    build:
+      context: ..
+      dockerfile: agents/email_composer/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8008:8008"
+    volumes:
+      - ../auth:/app/auth:ro # Gmail OAuth token for sending
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+  # ── Gate 10: RSVP Monitor (port 8009) ────────────────────────────────────
+
+  rsvp_monitor:
+    build:
+      context: ..
+      dockerfile: agents/rsvp_monitor/Dockerfile
+    <<: [ *common, *agent-deps ]
+    ports:
+      - "8009:8009"
+    volumes:
+      - ../auth:/app/auth:ro # Gmail + GCal tokens
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+
+volumes:
+  pg_data:
+  redis_data:
+
+
+networks:
+  charity_net:
+    driver: bridge

@@ -1,0 +1,5 @@
+slack app ID : A0AGDERLTHC
+slack client ID : 10544109340487.10557501707590
+slack client secret : cd23af0317cbd64382b340ce1cbb9332
+signing secret : 69d687d13eef6dcc937b0e7e5f309f8c
+verification token : 6fTP46qlAbnNxWkr8A7K4tfe

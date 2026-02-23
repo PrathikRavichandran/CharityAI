@@ -1,0 +1,4 @@
+aws
+RDS db name : charityai-db
+RDS db instance name : postgres
+RDS db instance password : pg-charityai
