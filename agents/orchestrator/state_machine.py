@@ -250,6 +250,26 @@ class StateMachine:
 
     async def create_pipeline(self, payload: dict) -> str:
         """Insert a new pipeline row and return its UUID."""
+        # Prevent 500 errors on A2A retries by checking for existing row
+        existing = await self.get_pipeline_by_email(payload["email_id"])
+        if existing:
+            logger.info("Pipeline already exists for email %s — returning existing ID", payload["email_id"])
+            return str(existing["id"])
+
+        ein = payload.get("ein")
+        org_name = payload.get("org_name")
+
+        if ein and org_name:
+            from shared.db import execute
+            await execute(
+                """
+                INSERT INTO organizations (ein, name)
+                VALUES ($1, $2)
+                ON CONFLICT (ein) DO NOTHING
+                """,
+                ein, org_name
+            )
+
         row = await fetch_one(
             """
             INSERT INTO pipeline
@@ -261,8 +281,8 @@ class StateMachine:
             """,
             payload["email_id"],
             payload.get("email_thread_id"),
-            payload.get("ein"),
-            payload.get("org_name"),
+            ein,
+            org_name,
             payload.get("contact_email"),
             payload.get("reason"),
             payload.get("urgency_signals", []),

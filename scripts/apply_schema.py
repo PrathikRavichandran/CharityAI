@@ -55,8 +55,8 @@ async def main() -> None:
 
     # Friendly display (mask password)
     display = url.split("@")[-1] if "@" in url else url
-    print(f"🔗  Connecting to: {url[:30]}...")
-
+    print(f" Connecting to: {url[:30]}...")
+    
     schema_path = ROOT / "infra" / "schema.sql"
     if not schema_path.exists():
         print(f"❌  Schema file not found: {schema_path}")
@@ -66,24 +66,24 @@ async def main() -> None:
 
     try:
         conn = await asyncpg.connect(url, timeout=15)
-        print("✅  Connected to database")
+        print("  Connected to database")
 
         async with conn.transaction():
             await conn.execute(schema_sql)
 
         await conn.close()
-        print("✅  Schema applied successfully!")
+        print("  Schema applied successfully!")
         print("    Tables: pipeline, organizations, priority_queue,")
         print("            appointment_history, audit_log, dropped_emails")
 
     except asyncpg.exceptions.PostgresError as e:
-        print(f"❌  PostgreSQL error: {e}")
+        print(f"  PostgreSQL error: {e}")
         sys.exit(1)
     except OSError as e:
-        print(f"❌  Connection failed: {e}")
+        print(f"  Connection failed: {e}")
         print()
         if "localhost" not in url and "127.0.0.1" not in url:
-            print("  ⚠️  RDS is unreachable from your current IP.")
+            print("    RDS is unreachable from your current IP.")
             print("  Fix: AWS Console → RDS → Security Group → Add inbound rule:")
             print("       Type: PostgreSQL | Port: 5432 | Source: My IP")
             print()

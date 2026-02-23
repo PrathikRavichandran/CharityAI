@@ -232,8 +232,8 @@ async def run_once() -> None:
         result = service.users().messages().list(
             userId="me",
             labelIds=["UNREAD", "INBOX"],
-            q=f"after:{_START_TIME}",
-            maxResults=50,
+            q="is:unread",
+            maxResults=1,
         ).execute()
     except HttpError as e:
         log.error("Gmail list failed: %s", e)
