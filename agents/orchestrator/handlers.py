@@ -43,16 +43,26 @@ async def handle_email_classified(payload: dict, sm, agents: dict) -> None:
         "urgency_signals": p.urgency_signals,
         "received_at":    p.received_at,
     })
-    await sm.transition(
-        pipeline_id, PipelineState.CLASSIFYING, actor="email_watcher",
-        details={"classifier_confidence": p.classifier_confidence},
-    )
-    # Dispatch to Dedup Guard
-    await sm.transition(pipeline_id, PipelineState.DEDUP_CHECK, actor="orchestrator")
-    await a2a_dispatch(
-        agents["dedup_guard"], TaskType.EMAIL_CLASSIFIED,
-        {**payload, "pipeline_id": pipeline_id}, pipeline_id,
-    )
+    
+    row = await sm.get_pipeline(pipeline_id)
+    state = PipelineState(row["current_state"])
+    
+    if state == PipelineState.EMAIL_RECEIVED:
+        await sm.transition(
+            pipeline_id, PipelineState.CLASSIFYING, actor="email_watcher",
+            details={"classifier_confidence": p.classifier_confidence},
+        )
+        state = PipelineState.CLASSIFYING
+
+    if state == PipelineState.CLASSIFYING:
+        await sm.transition(pipeline_id, PipelineState.DEDUP_CHECK, actor="orchestrator")
+        state = PipelineState.DEDUP_CHECK
+        
+    if state == PipelineState.DEDUP_CHECK:
+        await a2a_dispatch(
+            agents["dedup_guard"], TaskType.EMAIL_CLASSIFIED,
+            {**payload, "pipeline_id": pipeline_id}, pipeline_id,
+        )
 
 
 async def handle_email_dropped(payload: dict, sm, agents: dict) -> None:

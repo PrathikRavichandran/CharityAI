@@ -232,7 +232,7 @@ async def run_once() -> None:
         result = service.users().messages().list(
             userId="me",
             labelIds=["UNREAD", "INBOX"],
-            q="is:unread",
+            q=f"is:unread after:{_START_TIME}",
             maxResults=1,
         ).execute()
     except HttpError as e:

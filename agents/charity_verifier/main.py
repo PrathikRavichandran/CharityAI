@@ -28,6 +28,7 @@ from pydantic_settings import BaseSettings
 from shared.db import get_pool, close_pool
 from shared.redis_client import get_redis, close_redis
 from shared.models import A2ATask, A2AResponse, TaskType
+from shared.telemetry import setup_telemetry
 from agents.charity_verifier import verifier
 
 log = structlog.get_logger()
@@ -49,6 +50,7 @@ logging.basicConfig(level=settings.LOG_LEVEL)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_telemetry("charity_verifier", app)
     mode = "MANUAL (IRS + web)" if settings.CANDID_MODE == "stub" else "LIVE (Candid + IRS)"
     log.info("Charity Verifier starting", mode=mode)
     await get_pool()

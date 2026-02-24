@@ -29,6 +29,7 @@ from pydantic_settings import BaseSettings
 from shared.db import get_pool, close_pool
 from shared.redis_client import get_redis, close_redis
 from shared.models import A2ATask, A2AResponse
+from shared.telemetry import setup_telemetry
 from agents.email_watcher import classifier, extractor, poller
 
 log = structlog.get_logger()
@@ -52,6 +53,7 @@ _poll_task: asyncio.Task | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _poll_task
+    setup_telemetry("email_watcher", app)
     log.info("Email Watcher starting up")
     await get_pool()
     await get_redis()

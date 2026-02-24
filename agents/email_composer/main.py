@@ -31,6 +31,7 @@ from pydantic_settings import BaseSettings
 from shared.db import get_pool, close_pool
 from shared.redis_client import get_redis, close_redis
 from shared.models import A2ATask, A2AResponse, TaskType, PADecision
+from shared.telemetry import setup_telemetry
 from agents.email_composer import composer
 
 log = structlog.get_logger()
@@ -51,6 +52,7 @@ logging.basicConfig(level=settings.LOG_LEVEL)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_telemetry("email_composer", app)
     log.info("Email Composer starting up")
     await get_pool()
     await get_redis()

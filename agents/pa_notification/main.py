@@ -34,6 +34,7 @@ from pydantic_settings import BaseSettings
 from shared.db import get_pool, close_pool
 from shared.redis_client import get_redis, close_redis
 from shared.models import A2ATask, A2AResponse, TaskType
+from shared.telemetry import setup_telemetry
 from agents.pa_notification import notifier, slack_handler
 
 log = structlog.get_logger()
@@ -57,6 +58,7 @@ logging.basicConfig(level=settings.LOG_LEVEL)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_telemetry("pa_notification", app)
     log.info("PA Notification Agent starting up", pa_user=settings.PA_SLACK_USER_ID)
     await get_pool()
     await get_redis()

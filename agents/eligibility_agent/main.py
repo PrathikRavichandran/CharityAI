@@ -30,6 +30,7 @@ from pydantic_settings import BaseSettings
 from shared.db import get_pool, close_pool
 from shared.redis_client import get_redis, close_redis
 from shared.models import A2ATask, A2AResponse, TaskType
+from shared.telemetry import setup_telemetry
 from agents.eligibility_agent import eligibility_logic
 
 log = structlog.get_logger()
@@ -51,6 +52,7 @@ logging.basicConfig(level=settings.LOG_LEVEL)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_telemetry("eligibility_agent", app)
     log.info("Eligibility Agent starting", window_days=settings.ELIGIBILITY_WINDOW_DAYS)
     await get_pool()
     await get_redis()
