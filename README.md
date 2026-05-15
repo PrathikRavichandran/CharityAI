@@ -8,7 +8,7 @@ dockerfile: Dockerfile.demo
 app_port: 7860
 pinned: false
 license: mit
-short_description: Autonomous email-to-appointment pipeline (9 agents, state machine)
+short_description: Autonomous email-to-appointment pipeline (9 agents)
 ---
 
 # CharityAI — Autonomous Email-to-Appointment Pipeline
