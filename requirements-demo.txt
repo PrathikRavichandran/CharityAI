@@ -1,0 +1,24 @@
+# Showcase deploy (app/demo.py on HF Spaces) — minimal deps only.
+# Full local pipeline still uses requirements.txt.
+
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+pydantic==2.7.1
+pydantic-settings==2.2.1
+
+# Demo imports the orchestrator state_machine for /architecture introspection;
+# state_machine transitively imports shared.db and shared.redis_client at
+# module-load time, so we install asyncpg + redis even though the demo
+# never opens a connection. These packages are small (~5MB combined) and
+# keep the imports clean rather than duplicating the state-machine constants.
+asyncpg==0.29.0
+redis[asyncio]==5.0.4
+sqlalchemy[asyncio]==2.0.29
+
+# Lightweight transitive deps used by shared/* modules
+structlog==24.2.0
+python-dotenv==1.0.1
+httpx==0.27.0
+
+# anthropic — required when LLM_PROVIDER=anthropic (cloud demo default)
+anthropic>=0.40.0

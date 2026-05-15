@@ -17,8 +17,18 @@ ENV/
 
 # Environment secrets — NEVER COMMIT
 .env
+.env.local
+.env.*.local
+!.env.example
 auth/gmail_token.json
 auth/gcalendar_token.json
+auth/*_oauth.json
+auth/*.json
+
+# Demo SQLite DB (auto-seeded on startup)
+charityai_demo.db
+*.sqlite
+*.sqlite3
 
 # IDE
 .idea/

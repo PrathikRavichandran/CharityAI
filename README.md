@@ -1,87 +1,109 @@
-# CharityAI: Autonomous Email-to-Appointment Pipeline
+---
+title: CharityAI
+emoji: 💌
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+dockerfile: Dockerfile.demo
+app_port: 7860
+pinned: false
+license: mit
+short_description: Autonomous email-to-appointment pipeline (9 agents, state machine)
+---
 
-CharityAI is a highly modular, multi-agent AI system designed to manage a charity appointment pipeline entirely autonomously. It watches an inbox for charity requests, classifies, verifies, scores, schedules, notifies a human-in-the-loop (HITL), and manages the confirmation/RSVP process.
+# CharityAI — Autonomous Email-to-Appointment Pipeline
 
-## 🌟 Architecture Overview
+CharityAI is a modular, multi-agent AI system that manages a charity appointment pipeline end-to-end without human triage. It watches an inbox, classifies, verifies (IRS), scores impact, schedules a slot, gates a human-in-the-loop on Slack, and tracks the RSVP — all through a strict state machine with full audit logging.
 
-The system runs 9 isolated containerized agents communicating via an HTTP Agent-to-Agent (A2A) protocol, orchestrated by a central State Machine.
+## Two ways to run this
 
-1.  **Orchestrator (Gate 1):** The central brain. Manages the state machine (20+ states), atomic DB writes, and dispatches tasks to other agents.
-2.  **Email Watcher (Gate 2):** Polls Gmail, uses **Phi3** to classify if an email is from a charity, uses **Mistral** to extract structured data (EIN, org name, reason).
-3.  **Dedup Guard (Gate 3):** Deterministic exact-match and semantic (same org) deduplication logic.
-4.  **Charity Verifier (Gate 4):** Uses IRS Tax-Exempt API (or web search fallback) to verify EINs. Uses **Mistral** to synthesize a confidence score.
-5.  **Eligibility Agent (Gate 5):** SQL-based check ensuring the org hasn't had an appointment in 90 days, with an urgency escalation path.
-6.  **Prioritizer (Gate 6):** Uses **Llama3** to extract impact scale, ranks orgs based on a robust rubric (people scale, wait time, urgency, confidence), and manages a priority queue with weekly bumps.
-7.  **Calendar Agent (Gate 7):** Finds 30-min slots 14–28 days out in Google Calendar and places tentative holds.
-8.  **PA Notification (Gate 8):** Drafts a summary via **Llama3** and sends a Slack Block Kit message to a Personal Assistant (PA) for Approve/Reject. Handles auto-approvals on a 24h timeout.
-9.  **Email Composer & RSVP Monitor:** Drafts and sends confirmation/rejection emails via **Llama3**. Watches the reply thread, uses **Phi3** to classify the RSVP intent (confirm/decline), and finalizes or cancels the Calendar hold appropriately.
+| Mode | Where | What runs | Infra |
+|---|---|---|---|
+| **Showcase demo** | `Dockerfile.demo` → HF Spaces | Single FastAPI process, walks the state machine with synthetic data | none |
+| **Full pipeline** | `make docker-up` → local | All 9 agents + Postgres + Redis + Ollama (Phi3/Mistral/Llama3) | Docker Compose |
 
-## 🛠️ Prerequisites
+The showcase is what's deployed publicly (free-tier hosts can't run a 9-service distributed system + Postgres + Redis + Ollama). The full pipeline is the real product and lives in `agents/`, `shared/`, and `infra/`.
 
-1.  **Docker & Docker Compose:** Required to run PostgreSQL and Redis.
-2.  **Ollama:** Must be running locally on `localhost:11434` with the following models pulled:
-    ```bash
-    ollama run phi3
-    ollama run mistral
-    ollama run llama3
-    ```
-3.  **Google OAuth2 Credentials:** You need `auth/gmail_token.json` and `auth/gcalendar_token.json`.
-    *   Create a Google Cloud Project → APIs & Services → Credentials.
-    *   Create an **OAuth 2.0 Client ID (Desktop app)**.
-    *   Download JSON to `auth/gmail_oauth.json`.
-    *   Run `make tokens` to generate the tokens.
-4.  **Slack App:** Create an app, get the Bot Token (`xoxb-...`), and set up Interactive Components (Webhook URL).
+## Showcase endpoints (deployed)
 
-## 🚀 Quick Start (Local Development)
-
-1.  **Setup Environment:**
-    ```bash
-    python -m venv .venv
-    .venv\Scripts\activate
-    pip install -r requirements.txt
-    ```
-
-2.  **Configure `.env`:**
-    Copy `.env.local` to `.env`. Ensure your Slack and Google credentials are correct.
-    ```bash
-    cp .env.local .env
-    ```
-
-3.  **Start Infrastructure:**
-    Starts PostgreSQL and Redis via Docker.
-    ```bash
-    make up
-    ```
-
-4.  **Apply Database Schema:**
-    Applies the schema to the local Postgres DB.
-    ```bash
-    make schema
-    ```
-
-5.  **Run All Agents:**
-    This command opens 10 separate PowerShell windows (9 agents + 1 audit sidecar).
-    ```bash
-    make dev
-    ```
-
-## 🐳 Docker Deployment (Production)
-
-To run the entire suite of 9 agents + PostgreSQL + Redis in Docker:
-
-```bash
-# Build all images
-make docker-build
-
-# Start the cluster
-make docker-up
+```
+GET  /                  →  landing page (architecture overview, how-to-demo)
+GET  /health            →  liveness check
+GET  /architecture      →  full state machine + 9-agent map as JSON
+POST /demo/walkthrough  →  simulate one pipeline run with stub data
+GET  /docs              →  Swagger UI
 ```
 
-## 🧪 Testing
+```bash
+curl -X POST $URL/demo/walkthrough \
+  -H "Content-Type: application/json" \
+  -d '{"org_name":"Hope Community Kitchen","ein":"12-3456789","reason":"food bank Q4"}'
+```
 
-The codebase includes comprehensive unit tests across all phases, achieving ~100% logic coverage, plus a full end-to-end integration test.
+## Architecture (full pipeline, 9 gates)
+
+1. **Orchestrator** (Gate 1) — central state machine, A2A dispatch, atomic DB writes
+2. **Email Watcher** (Gate 2) — Gmail polling, **Phi3** classify, **Mistral** structured extract
+3. **Dedup Guard** (Gate 3) — exact-match + semantic (same-org) dedup
+4. **Charity Verifier** (Gate 4) — IRS Tax-Exempt API + web-search fallback, **Mistral** synthesis
+5. **Eligibility Agent** (Gate 5) — 90-day cooldown + urgency escalation
+6. **Prioritizer** (Gate 6) — **Llama3** impact extraction, weighted ranking + weekly bumps
+7. **Calendar Agent** (Gate 7) — Google Calendar 30-min slot search, tentative holds
+8. **PA Notification** (Gate 8) — Slack Block Kit approve/reject + 24h auto-approve timeout
+9. **Email Composer + RSVP Monitor** (Gate 9) — **Llama3** drafts confirmation/rejection, **Phi3** classifies the RSVP reply, finalizes or releases the calendar hold
+
+Switch the LLM provider with the `LLM_PROVIDER` env var:
+
+- `LLM_PROVIDER=ollama` (default) → local Ollama on `:11434`
+- `LLM_PROVIDER=anthropic` → Claude Haiku for fast tasks (classify, RSVP intent), Sonnet for everything else (extract, score, draft)
+
+The cloud demo uses `LLM_PROVIDER=anthropic` so it can run without a local Ollama install. See `shared/llm.py`.
+
+## Prerequisites (full local pipeline only)
+
+1. **Docker & Docker Compose** — for Postgres + Redis
+2. **Ollama** running on `localhost:11434` with `phi3`, `mistral`, `llama3` pulled (skip if `LLM_PROVIDER=anthropic`)
+3. **Google OAuth2** credentials in `auth/gmail_oauth.json` and `auth/gcalendar_oauth.json`; run `make tokens`
+4. **Slack App** — create at <https://api.slack.com/apps>, copy Client ID / Secret / Signing Secret / Verification Token / Bot Token into `.env`
+
+## Quick start (full pipeline, local)
 
 ```bash
-# Run all tests
-make test
+python -m venv .venv && .venv/Scripts/activate    # Windows
+# source .venv/bin/activate                        # macOS/Linux
+pip install -r requirements.txt
+
+cp .env.example .env                                # then fill in real values
+make up                                             # Postgres + Redis
+make schema                                         # apply infra/schema.sql
+make tokens                                         # one-time Google OAuth
+make dev                                            # spins up all 9 agents
 ```
+
+## Quick start (showcase demo, local)
+
+```bash
+pip install -r requirements-demo.txt
+LLM_PROVIDER=anthropic uvicorn app.demo:app --reload --port 7860
+# open http://localhost:7860
+```
+
+## Deploy the showcase to Hugging Face Spaces
+
+1. Create a new Space at <https://huggingface.co/new-space> with `SDK = Docker`. Name it e.g. `charityai-demo`.
+2. Push this repo to the Space (or link the GitHub repo via the Spaces UI). HF reads the `dockerfile: Dockerfile.demo` field from the README YAML and builds from `Dockerfile.demo`.
+3. In **Settings → Variables and secrets**, add:
+   - `ANTHROPIC_API_KEY` (secret) — required even though the demo doesn't make LLM calls (it imports `shared.llm` which checks the var when `LLM_PROVIDER=anthropic`)
+4. The Space exposes port 7860; visit it for the landing page, or `/docs` for Swagger.
+
+## Testing
+
+```bash
+make test                                          # unit + integration + e2e
+```
+
+Unit + integration tests have ~100% logic coverage; e2e covers the full happy path through all 9 gates with mocked external APIs.
+
+## Security note
+
+The `.env.example` template uses placeholder values for Slack credentials. **Real values belong only in `.env`** (gitignored), or in your deploy platform's secrets UI. If you ever paste a real key into a tracked file, rotate it immediately.

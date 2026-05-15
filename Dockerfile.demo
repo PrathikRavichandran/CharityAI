@@ -1,0 +1,35 @@
+# CharityAI — single-process showcase deploy (Hugging Face Spaces).
+#
+# This is NOT the full multi-agent pipeline. It runs app/demo.py, which
+# walks the state machine with synthetic data — see app/demo.py docstring.
+# The real system runs locally via `make docker-up`.
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEMO_MODE=true \
+    LLM_PROVIDER=anthropic
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install only what the demo entrypoint needs. We deliberately skip the
+# heavy infra deps (asyncpg, redis, google-api, slack-sdk) since the demo
+# never imports them at runtime.
+COPY requirements-demo.txt ./
+RUN pip install --upgrade pip && pip install -r requirements-demo.txt
+
+# Bring in the source. The demo only touches app/, shared/models.py, and
+# agents/orchestrator/state_machine.py — but copying the tree lets the
+# /architecture endpoint introspect the real types.
+COPY . .
+
+ENV PORT=7860
+EXPOSE 7860
+
+CMD ["sh", "-c", "uvicorn app.demo:app --host 0.0.0.0 --port ${PORT:-7860}"]
